@@ -1,0 +1,553 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  extractGray, gaussBlur, bilateralFilter, unsharpMask,
+  cannyEdge, laplacianOfGaussian, dilate, morphClose, blueNoise
+} from './utils/engine';
+
+export default function App() {
+  // --- STATE: AUTH & USER ---
+  const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('login');
+  
+  // --- STATE: UI & MODALS ---
+  const [toast, setToast] = useState({ msg: '', type: '', show: false });
+  const [modalBuy, setModalBuy] = useState(false);
+  const [modalAcc, setModalAcc] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [procText, setProcText] = useState('PROCESSING...');
+  
+  // --- STATE: WORKSPACE & IMAGE ---
+  const [view, setView] = useState('home'); // 'home' | 'workspace'
+  const [origImg, setOrigImg] = useState('');
+  const [finalImg, setFinalImg] = useState('');
+  const [compSlider, setCompSlider] = useState(50);
+  
+  // --- STATE: SLIDERS & SETTINGS ---
+  const [detail, setDetail] = useState(3);
+  const [thresh, setThresh] = useState(120);
+  const [shade, setShade] = useState(65);
+  const [dot, setDot] = useState(12);
+  const [contrast, setContrast] = useState(13);
+  const [sharp, setSharp] = useState(10);
+  
+  const [activePreset, setActivePreset] = useState('dotwork');
+  const [inkColor, setInkColor] = useState({ r: 26, g: 15, b: 92 });
+
+  // --- REFS ---
+  const canvasRef = useRef(null);
+  const imgRef = useRef(null); // Hidden image element to read pixel data
+  const compWrapRef = useRef(null);
+
+  // --- HELPERS: TOAST & LOCALSTORAGE ---
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type, show: true });
+    setTimeout(() => setToast({ msg: '', type: '', show: false }), 2500);
+  };
+
+  const getDB = () => JSON.parse(localStorage.getItem('hopeplus_users')) || {};
+  const saveDB = (db) => localStorage.setItem('hopeplus_users', JSON.stringify(db));
+
+  useEffect(() => {
+    const session = JSON.parse(localStorage.getItem('hopeplus_session'));
+    if (session) {
+      const db = getDB();
+      if (db[session.username]) setUser(db[session.username]);
+    }
+  }, []);
+
+  const updateUser = (data) => {
+    if (!user) return;
+    const db = getDB();
+    const updated = { ...db[user.username], ...data };
+    db[user.username] = updated;
+    saveDB(db);
+    setUser(updated);
+  };
+
+  const useCredit = () => {
+    if (!user) return false;
+    if (user.credits <= 0) {
+      setModalBuy(true);
+      showToast('Kredit habis! Silakan beli kredit.', 'error');
+      return false;
+    }
+    updateUser({ credits: user.credits - 1, used: (user.used || 0) + 1 });
+    return true;
+  };
+
+  // --- AUTH FUNCTIONS ---
+  const doRegister = () => {
+    const u = document.getElementById('reg-user').value.trim();
+    const e = document.getElementById('reg-email').value.trim();
+    const p = document.getElementById('reg-pass').value;
+    if (u.length < 3) return alert('Username minimal 3 karakter.');
+    if (!e.includes('@')) return alert('Email tidak valid.');
+    if (p.length < 6) return alert('Password minimal 6 karakter.');
+
+    const db = getDB();
+    if (db[u]) return alert('Username sudah digunakan.');
+
+    const newUser = { username: u, email: e, pass: p, credits: 5, used: 0, downloads: 0 };
+    db[u] = newUser;
+    saveDB(db);
+    localStorage.setItem('hopeplus_session', JSON.stringify({ username: u }));
+    setUser(newUser);
+    showToast('Akun dibuat! Anda mendapat 5 kredit gratis.', 'success');
+  };
+
+  const doLogin = () => {
+    const u = document.getElementById('login-user').value.trim();
+    const p = document.getElementById('login-pass').value;
+    const db = getDB();
+    if (!db[u] || db[u].pass !== p) return alert('Username atau password salah.');
+    
+    localStorage.setItem('hopeplus_session', JSON.stringify({ username: u }));
+    setUser(db[u]);
+    showToast('Selamat datang di Hope+! ✦', 'success');
+  };
+
+  const doLicense = () => {
+    const code = document.getElementById('license-input').value.trim().toUpperCase();
+    if (code === 'LUNAS2026' || code === 'ADMIN') {
+      const db = getDB();
+      if (!db['admin']) db['admin'] = { username: 'admin', email: 'admin@hopeplus.id', pass: '', credits: 9999, used: 0, downloads: 0 };
+      saveDB(db);
+      localStorage.setItem('hopeplus_session', JSON.stringify({ username: 'admin' }));
+      setUser(db['admin']);
+      showToast('Bypass Admin Aktif!', 'success');
+    } else {
+      alert('Kode tidak valid.');
+    }
+  };
+
+  const doLogout = () => {
+    localStorage.removeItem('hopeplus_session');
+    setUser(null);
+    setView('home');
+    setModalAcc(false);
+    showToast('Berhasil keluar.', 'warn');
+  };
+
+  // --- UPLOAD & AI ---
+  const handleUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file || !useCredit()) return;
+    setIsProcessing(true);
+    setProcText('MEMUAT GAMBAR...');
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setOrigImg(ev.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAiGen = async () => {
+    if (!useCredit()) return;
+    const prompt = document.getElementById('ai-prompt').value.trim();
+    if (!prompt) return showToast('Ketik dulu ide tato kamu!', 'warn');
+
+    setIsProcessing(true);
+    setProcText('AI GENERATING...');
+    try {
+      const fd = new FormData();
+      fd.append('prompt', prompt + ', tattoo stencil, fine line art, highly detailed, white background, professional tattoo design, no color');
+      fd.append('output_format', 'png');
+      const resp = await fetch('https://api.stability.ai/v2beta/stable-image/generate/core', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer sk-2kDBGxQGfmesSOFWdYfvr3uBwydiZZw3MiUpGds18PZcs7sM`, 'Accept': 'image/*' },
+        body: fd
+      });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        setOrigImg(URL.createObjectURL(blob));
+      } else {
+        throw new Error('API Error');
+      }
+    } catch {
+      showToast('AI error — cek koneksi atau kredit.', 'error');
+      updateUser({ credits: user.credits + 1, used: Math.max(0, user.used - 1) });
+      setIsProcessing(false);
+    }
+  };
+
+  // --- IMAGE PIPELINE EFFECT ---
+  // Runs whenever origImg is set or a slider changes.
+  useEffect(() => {
+    if (!origImg || !imgRef.current) return;
+    
+    // We need to wait for the image to load its dimensions
+    imgRef.current.onload = () => {
+      if (view === 'home') setView('workspace');
+      runPipeline();
+    };
+  }, [origImg]);
+
+  // Handle Slider changes without fully reloading the image
+  useEffect(() => {
+    if (view === 'workspace' && origImg) {
+      const timeout = setTimeout(() => {
+        runPipeline(true);
+      }, 350);
+      return () => clearTimeout(timeout);
+    }
+  }, [detail, thresh, shade, dot, contrast, sharp, inkColor]);
+
+  // --- PIPELINE ENGINE ---
+  const runPipeline = (fromSlider = false) => {
+    const img = imgRef.current;
+    const canvas = canvasRef.current;
+    if (!img || !canvas || !img.src) return;
+
+    setIsProcessing(true);
+    if (!fromSlider) setProcText('INITIALIZING PIPELINE...');
+
+    // Setup Canvas Dimensions
+    const MAX = 2048;
+    let W = img.naturalWidth || img.width;
+    let H = img.naturalHeight || img.height;
+    if (W > MAX) { H = Math.round(H * MAX / W); W = MAX; }
+    canvas.width = W; canvas.height = H;
+
+    const yieldThread = (msg) => new Promise(r => {
+      if (!fromSlider) setProcText(msg);
+      setTimeout(r, 20);
+    });
+
+    const process = async () => {
+      const ctx = canvas.getContext('2d');
+      const cV = contrast / 10.0;
+      const sD = shade / 100.0;
+      const dSz = dot / 10.0;
+      const shV = sharp / 10.0;
+
+      const bilSigmaS = Math.min(4, Math.max(1.2, detail * 0.18 + 0.8));
+      const bilSigmaR = 0.09 + (1 - thresh / 240) * 0.08;
+      const umSigma  = Math.max(0.8, detail * 0.2);
+      const umAmount = shV * 0.9;
+      const normT   = thresh / 240.0;
+      const hi1 = 0.28 + normT * 0.32; const lo1 = hi1 * 0.45;
+      const hi2 = hi1 * 0.60;          const lo2 = hi2 * 0.45;
+      const hi3 = hi1 * 0.45;          const lo3 = hi3 * 0.45;
+      const loGThresh = 0.35 + normT * 0.20;
+      const sig1 = Math.max(1.2, detail * 0.22 + 0.8);
+      const sig2 = Math.max(0.7, sig1 * 0.55);
+      const sig3 = Math.max(0.4, sig2 * 0.55);
+      const dilR1 = Math.max(1.0, detail * 0.22);
+      const dilR2 = Math.max(0.6, dilR1 * 0.55);
+
+      await yieldThread('STAGE 1 — GRAYSCALE EXTRACTION...');
+      const rawGray = extractGray(img, W, H, cV);
+
+      await yieldThread('STAGE 2 — BILATERAL FILTER...');
+      const smoothGray = bilateralFilter(rawGray, W, H, bilSigmaS, bilSigmaR);
+
+      await yieldThread('STAGE 3 — CONTRAST ENHANCEMENT...');
+      const enhGray = unsharpMask(smoothGray, W, H, umSigma, umAmount);
+
+      await yieldThread('STAGE 4 — CANNY EDGE DETECTION...');
+      let edgeS = cannyEdge(enhGray, W, H, sig1, lo1, hi1);
+      edgeS = dilate(edgeS, W, H, dilR1);
+      let edgeM = cannyEdge(enhGray, W, H, sig2, lo2, hi2);
+      edgeM = dilate(edgeM, W, H, dilR2);
+      const edgeF = cannyEdge(rawGray, W, H, sig3, lo3, hi3);
+      for (let i = 0; i < edgeF.length; i++) {
+        if (edgeS[i] || edgeM[i]) edgeF[i] = 0;
+      }
+
+      await yieldThread('STAGE 5 — LAPLACIAN-OF-GAUSSIAN...');
+      const edgeLoG = laplacianOfGaussian(rawGray, W, H, 0.7, loGThresh);
+
+      await yieldThread('STAGE 6 — MORPHOLOGICAL GAP-FILL...');
+      const composite = new Uint8Array(W * H);
+      for (let i = 0; i < composite.length; i++) {
+        composite[i] = edgeS[i] | edgeM[i] | edgeF[i] | edgeLoG[i];
+      }
+      const closedEdge = morphClose(composite, W, H, 1.5);
+      const shadeGray = gaussBlur(smoothGray, W, H, Math.max(0.8, detail * 0.25));
+
+      await yieldThread('STAGE 7-9 — DOTWORK SHADING & RENDER...');
+      const outData = ctx.createImageData(W, H);
+      const od = outData.data;
+      const shadeMin = Math.max(0, 1.0 - sD * 1.05);
+
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i  = y * W + x;
+          const pi = i * 4;
+          const isEdge = closedEdge[i] === 1;
+          const g = shadeGray[i];
+          const probRaw = ((1.0 - g) - shadeMin) / (1.0 - shadeMin + 1e-6);
+          const prob = Math.max(0, Math.min(1, probRaw));
+          const isDot = blueNoise(x, y) < (prob * dSz * 0.52);
+
+          if (isEdge || isDot) {
+            od[pi] = inkColor.r; od[pi+1] = inkColor.g; od[pi+2] = inkColor.b; od[pi+3] = 255;
+          } else {
+            od[pi] = 255; od[pi+1] = 255; od[pi+2] = 255; od[pi+3] = 255;
+          }
+        }
+      }
+
+      ctx.putImageData(outData, 0, 0);
+      setFinalImg(canvas.toDataURL('image/png', 1.0));
+      if (!fromSlider) showToast('Stensil selesai! ✦', 'success');
+      setIsProcessing(false);
+    };
+
+    process();
+  };
+
+  // --- PRESETS ---
+  const applyPreset = (name) => {
+    setActivePreset(name);
+    const p = {
+      outline:   { d:2, t:90,  s:0,  dot:8,  c:14, sh:10 },
+      dotwork:   { d:3, t:120, s:65, dot:12, c:13, sh:10 },
+      heavy:     { d:8, t:160, s:85, dot:18, c:16, sh:14 },
+      fineline:  { d:1, t:88,  s:35, dot:8,  c:16, sh:16 },
+      neo:       { d:4, t:130, s:72, dot:15, c:14, sh:11 },
+      blackwork: { d:10,t:180, s:95, dot:22, c:18, sh:14 },
+    }[name];
+    setDetail(p.d); setThresh(p.t); setShade(p.s);
+    setDot(p.dot); setContrast(p.c); setSharp(p.sh);
+  };
+
+  // --- MOUSE/TOUCH SLIDER COMP ---
+  const handleSliderMove = (e) => {
+    if (!compWrapRef.current) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const r = compWrapRef.current.getBoundingClientRect();
+    let p = ((clientX - r.left) / r.width) * 100;
+    setCompSlider(Math.max(0, Math.min(100, p)));
+  };
+
+  // --- RENDER ---
+  return (
+    <>
+      {/* HIDDEN IMAGE FOR ENGINE */}
+      <img ref={imgRef} src={origImg} style={{ display: 'none' }} alt="source" crossOrigin="anonymous" />
+
+      {/* LOADING OVERLAY */}
+      <div id="proc-overlay" className={isProcessing ? 'show' : ''}>
+        <div className="spinner"></div>
+        <div className="proc-text">{procText}</div>
+      </div>
+
+      {/* TOAST */}
+      <div className={`toast ${toast.show ? 'show' : ''} ${toast.type}`}>
+        {toast.msg}
+      </div>
+
+      {/* PAYWALL */}
+      {!user && (
+        <div id="paywall-overlay">
+          <div className="paywall-box">
+            <div className="corner-deco tl"></div><div className="corner-deco tr"></div>
+            <div className="corner-deco bl"></div><div className="corner-deco br"></div>
+            <div className="paywall-brand">HOPE<span>+</span></div>
+            <div className="paywall-tagline">Professional HD Stencil Engine</div>
+            <div className="free-badge">✦ 5 KREDIT GRATIS ✦</div>
+
+            <div className="tabs">
+              <button className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`} onClick={() => setActiveTab('login')}>MASUK</button>
+              <button className={`tab-btn ${activeTab === 'register' ? 'active' : ''}`} onClick={() => setActiveTab('register')}>DAFTAR</button>
+              <button className={`tab-btn ${activeTab === 'license' ? 'active' : ''}`} onClick={() => setActiveTab('license')}>LISENSI</button>
+            </div>
+
+            {activeTab === 'login' && (
+              <div className="tab-content active">
+                <div className="field"><label>Username</label><input type="text" id="login-user" placeholder="username kamu" /></div>
+                <div className="field"><label>Password</label><input type="password" id="login-pass" placeholder="••••••••" /></div>
+                <button className="btn btn-cyan" onClick={doLogin}>MASUK →</button>
+              </div>
+            )}
+            {activeTab === 'register' && (
+              <div className="tab-content active">
+                <div className="field"><label>Username</label><input type="text" id="reg-user" placeholder="buat username" /></div>
+                <div className="field"><label>Email</label><input type="email" id="reg-email" placeholder="email@kamu.com" /></div>
+                <div className="field"><label>Password</label><input type="password" id="reg-pass" placeholder="min 6 karakter" /></div>
+                <button className="btn btn-cyan" onClick={doRegister}>DAFTAR GRATIS →</button>
+              </div>
+            )}
+            {activeTab === 'license' && (
+              <div className="tab-content active">
+                <input type="text" className="pw-input" id="license-input" placeholder="KODE LISENSI / ADMIN" />
+                <button className="btn btn-cyan" onClick={doLicense}>BUKA KUNCI →</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* HUD HEADER */}
+      <div id="hud-header">
+        <div className="hud-logo">
+          <div className="hud-logo-text">HOPE<span>+</span></div>
+        </div>
+        <div className="hud-right">
+          <div className="credit-hud" onClick={() => setModalBuy(true)}>
+            <span className="icon">💎</span>
+            <div>
+              <div className="count">{user?.credits || 0}</div>
+              <div className="label">KREDIT</div>
+            </div>
+          </div>
+          <div className="account-btn" onClick={() => setModalAcc(true)}>👤</div>
+        </div>
+      </div>
+
+      {/* MAIN CONTENT */}
+      <div id="main-content">
+        
+        {view === 'home' && (
+          <div id="pre-upload-view">
+            <div className="hero-section">
+              <div className="hero-title">STENCIL ENGINE<br/>NEXT GEN</div>
+              <div className="hero-sub">Konversi gambar → stensil tato berkualitas studio</div>
+            </div>
+
+            <div className="ai-section">
+              <div className="ai-section-title">✦ AI TATTOO GENERATOR</div>
+              <textarea id="ai-prompt" rows="3" placeholder="Contoh: Poseidon detailed portrait, trident, dotwork style..."></textarea>
+              <button className="btn btn-cyan" onClick={handleAiGen}>⚡ GENERATE AI</button>
+            </div>
+
+            <div className="upload-zone">
+              <h3>Upload Desain</h3>
+              <p>Ubah foto / sketsa menjadi stensil Thermal HD<br/><span style={{color:'var(--cyan)'}}>Menggunakan 1 kredit per proses</span></p>
+              <div className="btn btn-ghost" style={{pointerEvents:'none', maxWidth:'220px', margin:'0 auto'}}>📁 PILIH DARI GALERI</div>
+              <input type="file" accept="image/*" onChange={handleUpload} />
+            </div>
+          </div>
+        )}
+
+        {view === 'workspace' && (
+          <div id="workspace" style={{ display: 'block' }}>
+            <div className="ws-header">
+              <div className="ws-title">YOUR STENCIL</div>
+              <div className="ws-sub">Gunakan slider & preset untuk mengoptimalkan hasil stensil Anda.</div>
+            </div>
+
+            {/* PRESETS */}
+            <div className="panel">
+              <div className="panel-title">Quick Presets</div>
+              <div className="presets-grid">
+                {['outline','dotwork','heavy','fineline','neo','blackwork'].map(p => (
+                  <div key={p} className={`preset-card ${activePreset === p ? 'active' : ''}`} onClick={() => applyPreset(p)}>
+                    <div className="preset-name" style={{marginTop:'6px'}}>{p.toUpperCase()}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* SLIDERS */}
+            <div className="panel">
+              <div className="panel-title">Thermal Matrix Controller</div>
+              <div className="slider-group">
+                <div className="slider-header"><span className="slider-label">Ketebalan Garis</span><div className="val-box">{detail}</div></div>
+                <input type="range" min="1" max="20" value={detail} onChange={e => setDetail(e.target.value)} />
+              </div>
+              <div className="slider-group">
+                <div className="slider-header"><span className="slider-label">Ambang Batas Gelap</span><div className="val-box">{thresh}</div></div>
+                <input type="range" min="40" max="240" value={thresh} onChange={e => setThresh(e.target.value)} />
+              </div>
+              <div className="slider-group">
+                <div className="slider-header"><span className="slider-label">Kepadatan Shading</span><div className="val-box">{shade}</div></div>
+                <input type="range" min="0" max="100" value={shade} onChange={e => setShade(e.target.value)} />
+              </div>
+              <div className="slider-group">
+                <div className="slider-header"><span className="slider-label">Ukuran Titik Dot</span><div className="val-box">{(dot/10).toFixed(1)}</div></div>
+                <input type="range" min="5" max="35" value={dot} onChange={e => setDot(e.target.value)} />
+              </div>
+              <div className="slider-group">
+                <div className="slider-header"><span className="slider-label">Kontras Gambar</span><div className="val-box">{(contrast/10).toFixed(1)}</div></div>
+                <input type="range" min="8" max="30" value={contrast} onChange={e => setContrast(e.target.value)} />
+              </div>
+              <div className="slider-group">
+                <div className="slider-header"><span className="slider-label">Sharpening Edge</span><div className="val-box">{(sharp/10).toFixed(1)}</div></div>
+                <input type="range" min="5" max="25" value={sharp} onChange={e => setSharp(e.target.value)} />
+              </div>
+            </div>
+
+            {/* COLORS */}
+            <div className="panel">
+              <div className="panel-title">Warna Tinta Stensil</div>
+              <div className="swatches">
+                {[
+                  {r:26,g:15,b:92, bg:'#1a0f5c'}, {r:10,g:26,b:61, bg:'#0a1a3d'}, 
+                  {r:17,g:17,b:17, bg:'#111111'}, {r:61,g:10,b:10, bg:'#3d0a0a'},
+                  {r:10,g:61,b:26, bg:'#0a3d1a'}, {r:45,g:26,b:61, bg:'#2d1a3d'}
+                ].map((c, i) => (
+                  <div key={i} className={`swatch ${inkColor.r === c.r ? 'active' : ''}`} style={{background: c.bg}} onClick={() => setInkColor(c)}></div>
+                ))}
+              </div>
+            </div>
+
+            {/* COMPARISON */}
+            <div className="panel">
+              <div className="panel-title"><span>Before / After</span></div>
+              <div 
+                className="comparison-wrap" ref={compWrapRef}
+                onMouseMove={(e) => e.buttons === 1 && handleSliderMove(e)}
+                onTouchMove={handleSliderMove}
+              >
+                <canvas ref={canvasRef}></canvas>
+                <img id="layer-original" src={origImg} alt="" style={{ clipPath: `polygon(0 0, ${compSlider}% 0, ${compSlider}% 100%, 0 100%)` }} />
+                <div className="lbl lbl-l">Original</div><div className="lbl lbl-r">Stencil</div>
+                <div id="div-line" style={{ left: `${compSlider}%` }}></div>
+                <div id="div-handle" style={{ left: `${compSlider}%` }}>◂▸</div>
+              </div>
+            </div>
+
+            {/* FINAL OUTPUT */}
+            <div className="panel">
+              <div className="panel-title">Final Output</div>
+              <div className="final-box"><img id="final-img" src={finalImg} alt="Final" /></div>
+              <a href={finalImg} download="HopePlus_Stencil.png" style={{textDecoration:'none'}}>
+                <button className="btn btn-cyan" onClick={() => updateUser({downloads: (user.downloads||0)+1})} style={{marginBottom:'10px'}}>
+                  ↓ DOWNLOAD STENCIL HD
+                </button>
+              </a>
+              <button className="btn btn-ghost" onClick={() => { setOrigImg(''); setView('home'); }}>⟳ PROSES GAMBAR BARU</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL BUY */}
+      {modalBuy && (
+        <div className="modal-overlay open" onClick={(e) => e.target.className.includes('modal-overlay') && setModalBuy(false)}>
+          <div className="modal-box">
+            <button className="modal-close" onClick={() => setModalBuy(false)}>✕</button>
+            <div className="modal-title">BELI KREDIT</div>
+            <div className="modal-sub">Screenshot & DM Instagram @HopePlus untuk beli (Integrasi Stripe menyusul).</div>
+            <div className="price-cards">
+              <div className="price-card popular selected"><div className="badge">POPULER</div><div className="amount">10</div><div className="price">Rp 45.000</div></div>
+            </div>
+            <button className="btn btn-gold" onClick={() => { setModalBuy(false); showToast('Hubungi Admin ya!', 'warn'); }}>✓ KONFIRMASI</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ACCOUNT */}
+      {modalAcc && (
+        <div className="modal-overlay open" onClick={(e) => e.target.className.includes('modal-overlay') && setModalAcc(false)}>
+          <div className="modal-box">
+            <button className="modal-close" onClick={() => setModalAcc(false)}>✕</button>
+            <div className="modal-title">AKUN SAYA</div>
+            <div className="avatar">👤</div>
+            <div style={{textAlign:'center', marginBottom:'20px'}}>
+              <div style={{fontFamily:'Orbitron', fontSize:'16px'}}>{user?.username}</div>
+              <div style={{fontSize:'12px', color:'var(--muted)'}}>{user?.email}</div>
+            </div>
+            <div className="stat-row">
+              <div className="stat-box"><div className="stat-num">{user?.credits}</div><div className="stat-lbl">Kredit</div></div>
+              <div className="stat-box"><div className="stat-num">{user?.used || 0}</div><div className="stat-lbl">Dipakai</div></div>
+            </div>
+            <button className="btn btn-danger" onClick={doLogout}>⏻ KELUAR</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
