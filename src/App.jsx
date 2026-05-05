@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Header from './components/Header';
+import Paywall from './components/Paywall';
 import {
   extractGray, gaussBlur, bilateralFilter, unsharpMask,
   cannyEdge, laplacianOfGaussian, dilate, morphClose, blueNoise
@@ -7,7 +9,6 @@ import {
 export default function App() {
   // --- STATE: AUTH & USER ---
   const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('login');
   
   // --- STATE: UI & MODALS ---
   const [toast, setToast] = useState({ msg: '', type: '', show: false });
@@ -17,7 +18,7 @@ export default function App() {
   const [procText, setProcText] = useState('PROCESSING...');
   
   // --- STATE: WORKSPACE & IMAGE ---
-  const [view, setView] = useState('home'); // 'home' | 'workspace'
+  const [view, setView] = useState('home'); 
   const [origImg, setOrigImg] = useState('');
   const [finalImg, setFinalImg] = useState('');
   const [compSlider, setCompSlider] = useState(50);
@@ -33,12 +34,10 @@ export default function App() {
   const [activePreset, setActivePreset] = useState('dotwork');
   const [inkColor, setInkColor] = useState({ r: 26, g: 15, b: 92 });
 
-  // --- REFS ---
   const canvasRef = useRef(null);
-  const imgRef = useRef(null); // Hidden image element to read pixel data
+  const imgRef = useRef(null);
   const compWrapRef = useRef(null);
 
-  // --- HELPERS: TOAST & LOCALSTORAGE ---
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type, show: true });
     setTimeout(() => setToast({ msg: '', type: '', show: false }), 2500);
@@ -170,29 +169,21 @@ export default function App() {
     }
   };
 
-  // --- IMAGE PIPELINE EFFECT ---
-  // Runs whenever origImg is set or a slider changes.
   useEffect(() => {
     if (!origImg || !imgRef.current) return;
-    
-    // We need to wait for the image to load its dimensions
     imgRef.current.onload = () => {
       if (view === 'home') setView('workspace');
       runPipeline();
     };
   }, [origImg]);
 
-  // Handle Slider changes without fully reloading the image
   useEffect(() => {
     if (view === 'workspace' && origImg) {
-      const timeout = setTimeout(() => {
-        runPipeline(true);
-      }, 350);
+      const timeout = setTimeout(() => { runPipeline(true); }, 350);
       return () => clearTimeout(timeout);
     }
   }, [detail, thresh, shade, dot, contrast, sharp, inkColor]);
 
-  // --- PIPELINE ENGINE ---
   const runPipeline = (fromSlider = false) => {
     const img = imgRef.current;
     const canvas = canvasRef.current;
@@ -201,7 +192,6 @@ export default function App() {
     setIsProcessing(true);
     if (!fromSlider) setProcText('INITIALIZING PIPELINE...');
 
-    // Setup Canvas Dimensions
     const MAX = 2048;
     let W = img.naturalWidth || img.width;
     let H = img.naturalHeight || img.height;
@@ -215,10 +205,8 @@ export default function App() {
 
     const process = async () => {
       const ctx = canvas.getContext('2d');
-      const cV = contrast / 10.0;
-      const sD = shade / 100.0;
-      const dSz = dot / 10.0;
-      const shV = sharp / 10.0;
+      const cV = contrast / 10.0; const sD = shade / 100.0;
+      const dSz = dot / 10.0; const shV = sharp / 10.0;
 
       const bilSigmaS = Math.min(4, Math.max(1.2, detail * 0.18 + 0.8));
       const bilSigmaR = 0.09 + (1 - thresh / 240) * 0.08;
@@ -265,15 +253,14 @@ export default function App() {
       const closedEdge = morphClose(composite, W, H, 1.5);
       const shadeGray = gaussBlur(smoothGray, W, H, Math.max(0.8, detail * 0.25));
 
-      await yieldThread('STAGE 7-9 — DOTWORK SHADING & RENDER...');
+      await yieldThread('STAGE 7-9 — RENDER...');
       const outData = ctx.createImageData(W, H);
       const od = outData.data;
       const shadeMin = Math.max(0, 1.0 - sD * 1.05);
 
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          const i  = y * W + x;
-          const pi = i * 4;
+          const i  = y * W + x; const pi = i * 4;
           const isEdge = closedEdge[i] === 1;
           const g = shadeGray[i];
           const probRaw = ((1.0 - g) - shadeMin) / (1.0 - shadeMin + 1e-6);
@@ -293,11 +280,9 @@ export default function App() {
       if (!fromSlider) showToast('Stensil selesai! ✦', 'success');
       setIsProcessing(false);
     };
-
     process();
   };
 
-  // --- PRESETS ---
   const applyPreset = (name) => {
     setActivePreset(name);
     const p = {
@@ -312,7 +297,6 @@ export default function App() {
     setDot(p.dot); setContrast(p.c); setSharp(p.sh);
   };
 
-  // --- MOUSE/TOUCH SLIDER COMP ---
   const handleSliderMove = (e) => {
     if (!compWrapRef.current) return;
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -321,82 +305,23 @@ export default function App() {
     setCompSlider(Math.max(0, Math.min(100, p)));
   };
 
-  // --- RENDER ---
   return (
     <>
-      {/* HIDDEN IMAGE FOR ENGINE */}
       <img ref={imgRef} src={origImg} style={{ display: 'none' }} alt="source" crossOrigin="anonymous" />
 
-      {/* LOADING OVERLAY */}
       <div id="proc-overlay" className={isProcessing ? 'show' : ''}>
         <div className="spinner"></div>
         <div className="proc-text">{procText}</div>
       </div>
 
-      {/* TOAST */}
-      <div className={`toast ${toast.show ? 'show' : ''} ${toast.type}`}>
-        {toast.msg}
-      </div>
+      <div className={`toast ${toast.show ? 'show' : ''} ${toast.type}`}>{toast.msg}</div>
 
-      {/* PAYWALL */}
-      {!user && (
-        <div id="paywall-overlay">
-          <div className="paywall-box">
-            <div className="corner-deco tl"></div><div className="corner-deco tr"></div>
-            <div className="corner-deco bl"></div><div className="corner-deco br"></div>
-            <div className="paywall-brand">HOPE<span>+</span></div>
-            <div className="paywall-tagline">Professional HD Stencil Engine</div>
-            <div className="free-badge">✦ 5 KREDIT GRATIS ✦</div>
+      {/* PAYWALL SEKARANG DIPANGGIL LEWAT KOMPONEN */}
+      {!user && <Paywall doLogin={doLogin} doRegister={doRegister} doLicense={doLicense} />}
 
-            <div className="tabs">
-              <button className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`} onClick={() => setActiveTab('login')}>MASUK</button>
-              <button className={`tab-btn ${activeTab === 'register' ? 'active' : ''}`} onClick={() => setActiveTab('register')}>DAFTAR</button>
-              <button className={`tab-btn ${activeTab === 'license' ? 'active' : ''}`} onClick={() => setActiveTab('license')}>LISENSI</button>
-            </div>
+      {/* HEADER SEKARANG DIPANGGIL LEWAT KOMPONEN */}
+      <Header user={user} setModalBuy={setModalBuy} setModalAcc={setModalAcc} />
 
-            {activeTab === 'login' && (
-              <div className="tab-content active">
-                <div className="field"><label>Username</label><input type="text" id="login-user" placeholder="username kamu" /></div>
-                <div className="field"><label>Password</label><input type="password" id="login-pass" placeholder="••••••••" /></div>
-                <button className="btn btn-cyan" onClick={doLogin}>MASUK →</button>
-              </div>
-            )}
-            {activeTab === 'register' && (
-              <div className="tab-content active">
-                <div className="field"><label>Username</label><input type="text" id="reg-user" placeholder="buat username" /></div>
-                <div className="field"><label>Email</label><input type="email" id="reg-email" placeholder="email@kamu.com" /></div>
-                <div className="field"><label>Password</label><input type="password" id="reg-pass" placeholder="min 6 karakter" /></div>
-                <button className="btn btn-cyan" onClick={doRegister}>DAFTAR GRATIS →</button>
-              </div>
-            )}
-            {activeTab === 'license' && (
-              <div className="tab-content active">
-                <input type="text" className="pw-input" id="license-input" placeholder="KODE LISENSI / ADMIN" />
-                <button className="btn btn-cyan" onClick={doLicense}>BUKA KUNCI →</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* HUD HEADER */}
-      <div id="hud-header">
-        <div className="hud-logo">
-          <div className="hud-logo-text">HOPE<span>+</span></div>
-        </div>
-        <div className="hud-right">
-          <div className="credit-hud" onClick={() => setModalBuy(true)}>
-            <span className="icon">💎</span>
-            <div>
-              <div className="count">{user?.credits || 0}</div>
-              <div className="label">KREDIT</div>
-            </div>
-          </div>
-          <div className="account-btn" onClick={() => setModalAcc(true)}>👤</div>
-        </div>
-      </div>
-
-      {/* MAIN CONTENT */}
       <div id="main-content">
         
         {view === 'home' && (
@@ -405,13 +330,11 @@ export default function App() {
               <div className="hero-title">STENCIL ENGINE<br/>NEXT GEN</div>
               <div className="hero-sub">Konversi gambar → stensil tato berkualitas studio</div>
             </div>
-
             <div className="ai-section">
               <div className="ai-section-title">✦ AI TATTOO GENERATOR</div>
               <textarea id="ai-prompt" rows="3" placeholder="Contoh: Poseidon detailed portrait, trident, dotwork style..."></textarea>
               <button className="btn btn-cyan" onClick={handleAiGen}>⚡ GENERATE AI</button>
             </div>
-
             <div className="upload-zone">
               <h3>Upload Desain</h3>
               <p>Ubah foto / sketsa menjadi stensil Thermal HD<br/><span style={{color:'var(--cyan)'}}>Menggunakan 1 kredit per proses</span></p>
@@ -428,7 +351,6 @@ export default function App() {
               <div className="ws-sub">Gunakan slider & preset untuk mengoptimalkan hasil stensil Anda.</div>
             </div>
 
-            {/* PRESETS */}
             <div className="panel">
               <div className="panel-title">Quick Presets</div>
               <div className="presets-grid">
@@ -440,7 +362,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* SLIDERS */}
             <div className="panel">
               <div className="panel-title">Thermal Matrix Controller</div>
               <div className="slider-group">
@@ -469,7 +390,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* COLORS */}
             <div className="panel">
               <div className="panel-title">Warna Tinta Stensil</div>
               <div className="swatches">
@@ -483,14 +403,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* COMPARISON */}
             <div className="panel">
               <div className="panel-title"><span>Before / After</span></div>
-              <div 
-                className="comparison-wrap" ref={compWrapRef}
-                onMouseMove={(e) => e.buttons === 1 && handleSliderMove(e)}
-                onTouchMove={handleSliderMove}
-              >
+              <div className="comparison-wrap" ref={compWrapRef} onMouseMove={(e) => e.buttons === 1 && handleSliderMove(e)} onTouchMove={handleSliderMove}>
                 <canvas ref={canvasRef}></canvas>
                 <img id="layer-original" src={origImg} alt="" style={{ clipPath: `polygon(0 0, ${compSlider}% 0, ${compSlider}% 100%, 0 100%)` }} />
                 <div className="lbl lbl-l">Original</div><div className="lbl lbl-r">Stencil</div>
@@ -499,7 +414,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* FINAL OUTPUT */}
             <div className="panel">
               <div className="panel-title">Final Output</div>
               <div className="final-box"><img id="final-img" src={finalImg} alt="Final" /></div>
@@ -514,13 +428,12 @@ export default function App() {
         )}
       </div>
 
-      {/* MODAL BUY */}
       {modalBuy && (
         <div className="modal-overlay open" onClick={(e) => e.target.className.includes('modal-overlay') && setModalBuy(false)}>
           <div className="modal-box">
             <button className="modal-close" onClick={() => setModalBuy(false)}>✕</button>
             <div className="modal-title">BELI KREDIT</div>
-            <div className="modal-sub">Screenshot & DM Instagram @HopePlus untuk beli (Integrasi Stripe menyusul).</div>
+            <div className="modal-sub">Screenshot & DM Instagram @HopePlus untuk beli.</div>
             <div className="price-cards">
               <div className="price-card popular selected"><div className="badge">POPULER</div><div className="amount">10</div><div className="price">Rp 45.000</div></div>
             </div>
@@ -529,7 +442,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL ACCOUNT */}
       {modalAcc && (
         <div className="modal-overlay open" onClick={(e) => e.target.className.includes('modal-overlay') && setModalAcc(false)}>
           <div className="modal-box">
