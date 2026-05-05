@@ -1,36 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import Paywall from './components/Paywall';
+import Workspace from './components/Workspace';
 import {
   extractGray, gaussBlur, bilateralFilter, unsharpMask,
   cannyEdge, laplacianOfGaussian, dilate, morphClose, blueNoise
 } from './utils/engine';
 
 export default function App() {
-  // --- STATE: AUTH & USER ---
   const [user, setUser] = useState(null);
-  
-  // --- STATE: UI & MODALS ---
   const [toast, setToast] = useState({ msg: '', type: '', show: false });
   const [modalBuy, setModalBuy] = useState(false);
   const [modalAcc, setModalAcc] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [procText, setProcText] = useState('PROCESSING...');
-  
-  // --- STATE: WORKSPACE & IMAGE ---
   const [view, setView] = useState('home'); 
   const [origImg, setOrigImg] = useState('');
   const [finalImg, setFinalImg] = useState('');
   const [compSlider, setCompSlider] = useState(50);
-  
-  // --- STATE: SLIDERS & SETTINGS ---
   const [detail, setDetail] = useState(3);
   const [thresh, setThresh] = useState(120);
   const [shade, setShade] = useState(65);
   const [dot, setDot] = useState(12);
   const [contrast, setContrast] = useState(13);
   const [sharp, setSharp] = useState(10);
-  
   const [activePreset, setActivePreset] = useState('dotwork');
   const [inkColor, setInkColor] = useState({ r: 26, g: 15, b: 92 });
 
@@ -74,35 +67,27 @@ export default function App() {
     return true;
   };
 
-  // --- AUTH FUNCTIONS ---
+  // --- AUTH LOGIC ---
   const doRegister = () => {
     const u = document.getElementById('reg-user').value.trim();
     const e = document.getElementById('reg-email').value.trim();
     const p = document.getElementById('reg-pass').value;
-    if (u.length < 3) return alert('Username minimal 3 karakter.');
-    if (!e.includes('@')) return alert('Email tidak valid.');
-    if (p.length < 6) return alert('Password minimal 6 karakter.');
-
+    if (u.length < 3 || !e.includes('@') || p.length < 6) return alert('Data tidak valid.');
     const db = getDB();
     if (db[u]) return alert('Username sudah digunakan.');
-
     const newUser = { username: u, email: e, pass: p, credits: 5, used: 0, downloads: 0 };
-    db[u] = newUser;
-    saveDB(db);
+    db[u] = newUser; saveDB(db);
     localStorage.setItem('hopeplus_session', JSON.stringify({ username: u }));
-    setUser(newUser);
-    showToast('Akun dibuat! Anda mendapat 5 kredit gratis.', 'success');
+    setUser(newUser); showToast('Akun dibuat!', 'success');
   };
 
   const doLogin = () => {
     const u = document.getElementById('login-user').value.trim();
     const p = document.getElementById('login-pass').value;
     const db = getDB();
-    if (!db[u] || db[u].pass !== p) return alert('Username atau password salah.');
-    
+    if (!db[u] || db[u].pass !== p) return alert('Username/Password salah.');
     localStorage.setItem('hopeplus_session', JSON.stringify({ username: u }));
-    setUser(db[u]);
-    showToast('Selamat datang di Hope+! ✦', 'success');
+    setUser(db[u]); showToast('Selamat datang!', 'success');
   };
 
   const doLicense = () => {
@@ -110,33 +95,24 @@ export default function App() {
     if (code === 'LUNAS2026' || code === 'ADMIN') {
       const db = getDB();
       if (!db['admin']) db['admin'] = { username: 'admin', email: 'admin@hopeplus.id', pass: '', credits: 9999, used: 0, downloads: 0 };
-      saveDB(db);
-      localStorage.setItem('hopeplus_session', JSON.stringify({ username: 'admin' }));
-      setUser(db['admin']);
-      showToast('Bypass Admin Aktif!', 'success');
-    } else {
-      alert('Kode tidak valid.');
+      saveDB(db); localStorage.setItem('hopeplus_session', JSON.stringify({ username: 'admin' }));
+      setUser(db['admin']); showToast('Admin Mode!', 'success');
     }
   };
 
   const doLogout = () => {
     localStorage.removeItem('hopeplus_session');
-    setUser(null);
-    setView('home');
-    setModalAcc(false);
+    setUser(null); setView('home'); setModalAcc(false);
     showToast('Berhasil keluar.', 'warn');
   };
 
-  // --- UPLOAD & AI ---
+  // --- ENGINE & HANDLERS ---
   const handleUpload = (e) => {
     const file = e.target.files[0];
     if (!file || !useCredit()) return;
-    setIsProcessing(true);
-    setProcText('MEMUAT GAMBAR...');
+    setIsProcessing(true); setProcText('MEMUAT GAMBAR...');
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setOrigImg(ev.target.result);
-    };
+    reader.onload = (ev) => setOrigImg(ev.target.result);
     reader.readAsDataURL(file);
   };
 
@@ -144,12 +120,10 @@ export default function App() {
     if (!useCredit()) return;
     const prompt = document.getElementById('ai-prompt').value.trim();
     if (!prompt) return showToast('Ketik dulu ide tato kamu!', 'warn');
-
-    setIsProcessing(true);
-    setProcText('AI GENERATING...');
+    setIsProcessing(true); setProcText('AI GENERATING...');
     try {
       const fd = new FormData();
-      fd.append('prompt', prompt + ', tattoo stencil, fine line art, highly detailed, white background, professional tattoo design, no color');
+      fd.append('prompt', prompt + ', tattoo stencil, fine line art, professional design, white background');
       fd.append('output_format', 'png');
       const resp = await fetch('https://api.stability.ai/v2beta/stable-image/generate/core', {
         method: 'POST',
@@ -157,13 +131,10 @@ export default function App() {
         body: fd
       });
       if (resp.ok) {
-        const blob = await resp.blob();
-        setOrigImg(URL.createObjectURL(blob));
-      } else {
-        throw new Error('API Error');
-      }
+        const blob = await resp.blob(); setOrigImg(URL.createObjectURL(blob));
+      } else { throw new Error(); }
     } catch {
-      showToast('AI error — cek koneksi atau kredit.', 'error');
+      showToast('AI error.', 'error'); 
       updateUser({ credits: user.credits + 1, used: Math.max(0, user.used - 1) });
       setIsProcessing(false);
     }
@@ -171,260 +142,129 @@ export default function App() {
 
   useEffect(() => {
     if (!origImg || !imgRef.current) return;
-    imgRef.current.onload = () => {
-      if (view === 'home') setView('workspace');
-      runPipeline();
-    };
+    imgRef.current.onload = () => { if (view === 'home') setView('workspace'); runPipeline(); };
   }, [origImg]);
 
   useEffect(() => {
     if (view === 'workspace' && origImg) {
-      const timeout = setTimeout(() => { runPipeline(true); }, 350);
-      return () => clearTimeout(timeout);
+      const t = setTimeout(() => runPipeline(true), 350);
+      return () => clearTimeout(t);
     }
   }, [detail, thresh, shade, dot, contrast, sharp, inkColor]);
 
   const runPipeline = (fromSlider = false) => {
-    const img = imgRef.current;
-    const canvas = canvasRef.current;
+    const img = imgRef.current; const canvas = canvasRef.current;
     if (!img || !canvas || !img.src) return;
-
     setIsProcessing(true);
-    if (!fromSlider) setProcText('INITIALIZING PIPELINE...');
-
-    const MAX = 2048;
-    let W = img.naturalWidth || img.width;
-    let H = img.naturalHeight || img.height;
+    if (!fromSlider) setProcText('INITIALIZING...');
+    const MAX = 2048; let W = img.naturalWidth || img.width; let H = img.naturalHeight || img.height;
     if (W > MAX) { H = Math.round(H * MAX / W); W = MAX; }
     canvas.width = W; canvas.height = H;
 
-    const yieldThread = (msg) => new Promise(r => {
-      if (!fromSlider) setProcText(msg);
-      setTimeout(r, 20);
-    });
+    const yieldThread = (msg) => new Promise(r => { if (!fromSlider) setProcText(msg); setTimeout(r, 20); });
 
     const process = async () => {
       const ctx = canvas.getContext('2d');
-      const cV = contrast / 10.0; const sD = shade / 100.0;
-      const dSz = dot / 10.0; const shV = sharp / 10.0;
-
+      const cV = contrast / 10.0; const sD = shade / 100.0; const dSz = dot / 10.0; const shV = sharp / 10.0;
       const bilSigmaS = Math.min(4, Math.max(1.2, detail * 0.18 + 0.8));
       const bilSigmaR = 0.09 + (1 - thresh / 240) * 0.08;
-      const umSigma  = Math.max(0.8, detail * 0.2);
-      const umAmount = shV * 0.9;
-      const normT   = thresh / 240.0;
+      const umSigma = Math.max(0.8, detail * 0.2); const umAmount = shV * 0.9;
+      const normT = thresh / 240.0;
       const hi1 = 0.28 + normT * 0.32; const lo1 = hi1 * 0.45;
-      const hi2 = hi1 * 0.60;          const lo2 = hi2 * 0.45;
-      const hi3 = hi1 * 0.45;          const lo3 = hi3 * 0.45;
       const loGThresh = 0.35 + normT * 0.20;
       const sig1 = Math.max(1.2, detail * 0.22 + 0.8);
-      const sig2 = Math.max(0.7, sig1 * 0.55);
-      const sig3 = Math.max(0.4, sig2 * 0.55);
       const dilR1 = Math.max(1.0, detail * 0.22);
-      const dilR2 = Math.max(0.6, dilR1 * 0.55);
 
-      await yieldThread('STAGE 1 — GRAYSCALE EXTRACTION...');
+      await yieldThread('PROCESSING GRAYSCALE...');
       const rawGray = extractGray(img, W, H, cV);
-
-      await yieldThread('STAGE 2 — BILATERAL FILTER...');
+      await yieldThread('APPLYING FILTERS...');
       const smoothGray = bilateralFilter(rawGray, W, H, bilSigmaS, bilSigmaR);
-
-      await yieldThread('STAGE 3 — CONTRAST ENHANCEMENT...');
       const enhGray = unsharpMask(smoothGray, W, H, umSigma, umAmount);
-
-      await yieldThread('STAGE 4 — CANNY EDGE DETECTION...');
+      await yieldThread('DETECTING EDGES...');
       let edgeS = cannyEdge(enhGray, W, H, sig1, lo1, hi1);
       edgeS = dilate(edgeS, W, H, dilR1);
-      let edgeM = cannyEdge(enhGray, W, H, sig2, lo2, hi2);
-      edgeM = dilate(edgeM, W, H, dilR2);
-      const edgeF = cannyEdge(rawGray, W, H, sig3, lo3, hi3);
-      for (let i = 0; i < edgeF.length; i++) {
-        if (edgeS[i] || edgeM[i]) edgeF[i] = 0;
-      }
-
-      await yieldThread('STAGE 5 — LAPLACIAN-OF-GAUSSIAN...');
       const edgeLoG = laplacianOfGaussian(rawGray, W, H, 0.7, loGThresh);
-
-      await yieldThread('STAGE 6 — MORPHOLOGICAL GAP-FILL...');
       const composite = new Uint8Array(W * H);
-      for (let i = 0; i < composite.length; i++) {
-        composite[i] = edgeS[i] | edgeM[i] | edgeF[i] | edgeLoG[i];
-      }
+      for (let i = 0; i < composite.length; i++) composite[i] = edgeS[i] | edgeLoG[i];
       const closedEdge = morphClose(composite, W, H, 1.5);
       const shadeGray = gaussBlur(smoothGray, W, H, Math.max(0.8, detail * 0.25));
 
-      await yieldThread('STAGE 7-9 — RENDER...');
-      const outData = ctx.createImageData(W, H);
-      const od = outData.data;
+      await yieldThread('RENDERING STENCIL...');
+      const outData = ctx.createImageData(W, H); const od = outData.data;
       const shadeMin = Math.max(0, 1.0 - sD * 1.05);
-
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          const i  = y * W + x; const pi = i * 4;
+          const i = y * W + x; const pi = i * 4;
           const isEdge = closedEdge[i] === 1;
-          const g = shadeGray[i];
-          const probRaw = ((1.0 - g) - shadeMin) / (1.0 - shadeMin + 1e-6);
-          const prob = Math.max(0, Math.min(1, probRaw));
+          const prob = Math.max(0, Math.min(1, ((1.0 - shadeGray[i]) - shadeMin) / (1.0 - shadeMin + 1e-6)));
           const isDot = blueNoise(x, y) < (prob * dSz * 0.52);
-
-          if (isEdge || isDot) {
-            od[pi] = inkColor.r; od[pi+1] = inkColor.g; od[pi+2] = inkColor.b; od[pi+3] = 255;
-          } else {
-            od[pi] = 255; od[pi+1] = 255; od[pi+2] = 255; od[pi+3] = 255;
-          }
+          if (isEdge || isDot) { od[pi]=inkColor.r; od[pi+1]=inkColor.g; od[pi+2]=inkColor.b; od[pi+3]=255; }
+          else { od[pi]=255; od[pi+1]=255; od[pi+2]=255; od[pi+3]=255; }
         }
       }
-
       ctx.putImageData(outData, 0, 0);
       setFinalImg(canvas.toDataURL('image/png', 1.0));
-      if (!fromSlider) showToast('Stensil selesai! ✦', 'success');
+      if (!fromSlider) showToast('Stensil selesai!', 'success');
       setIsProcessing(false);
     };
     process();
-  };
-
-  const applyPreset = (name) => {
-    setActivePreset(name);
-    const p = {
-      outline:   { d:2, t:90,  s:0,  dot:8,  c:14, sh:10 },
-      dotwork:   { d:3, t:120, s:65, dot:12, c:13, sh:10 },
-      heavy:     { d:8, t:160, s:85, dot:18, c:16, sh:14 },
-      fineline:  { d:1, t:88,  s:35, dot:8,  c:16, sh:16 },
-      neo:       { d:4, t:130, s:72, dot:15, c:14, sh:11 },
-      blackwork: { d:10,t:180, s:95, dot:22, c:18, sh:14 },
-    }[name];
-    setDetail(p.d); setThresh(p.t); setShade(p.s);
-    setDot(p.dot); setContrast(p.c); setSharp(p.sh);
   };
 
   const handleSliderMove = (e) => {
     if (!compWrapRef.current) return;
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const r = compWrapRef.current.getBoundingClientRect();
-    let p = ((clientX - r.left) / r.width) * 100;
-    setCompSlider(Math.max(0, Math.min(100, p)));
+    setCompSlider(Math.max(0, Math.min(100, ((clientX - r.left) / r.width) * 100)));
   };
 
   return (
     <>
       <img ref={imgRef} src={origImg} style={{ display: 'none' }} alt="source" crossOrigin="anonymous" />
-
-      <div id="proc-overlay" className={isProcessing ? 'show' : ''}>
-        <div className="spinner"></div>
-        <div className="proc-text">{procText}</div>
-      </div>
-
+      <div id="proc-overlay" className={isProcessing ? 'show' : ''}><div className="spinner"></div><div className="proc-text">{procText}</div></div>
       <div className={`toast ${toast.show ? 'show' : ''} ${toast.type}`}>{toast.msg}</div>
 
-      {/* PAYWALL SEKARANG DIPANGGIL LEWAT KOMPONEN */}
       {!user && <Paywall doLogin={doLogin} doRegister={doRegister} doLicense={doLicense} />}
-
-      {/* HEADER SEKARANG DIPANGGIL LEWAT KOMPONEN */}
       <Header user={user} setModalBuy={setModalBuy} setModalAcc={setModalAcc} />
 
       <div id="main-content">
-        
-        {view === 'home' && (
+        {view === 'home' ? (
           <div id="pre-upload-view">
-            <div className="hero-section">
-              <div className="hero-title">STENCIL ENGINE<br/>NEXT GEN</div>
-              <div className="hero-sub">Konversi gambar → stensil tato berkualitas studio</div>
-            </div>
+            <div className="hero-section"><div className="hero-title">STENCIL ENGINE<br/>NEXT GEN</div><div className="hero-sub">Studio Quality Stencils.</div></div>
             <div className="ai-section">
               <div className="ai-section-title">✦ AI TATTOO GENERATOR</div>
-              <textarea id="ai-prompt" rows="3" placeholder="Contoh: Poseidon detailed portrait, trident, dotwork style..."></textarea>
+              <textarea id="ai-prompt" rows="3" placeholder="Contoh: Dragon portrait..."></textarea>
               <button className="btn btn-cyan" onClick={handleAiGen}>⚡ GENERATE AI</button>
             </div>
             <div className="upload-zone">
               <h3>Upload Desain</h3>
-              <p>Ubah foto / sketsa menjadi stensil Thermal HD<br/><span style={{color:'var(--cyan)'}}>Menggunakan 1 kredit per proses</span></p>
-              <div className="btn btn-ghost" style={{pointerEvents:'none', maxWidth:'220px', margin:'0 auto'}}>📁 PILIH DARI GALERI</div>
+              <div className="btn btn-ghost" style={{pointerEvents:'none', maxWidth:'220px', margin:'10px auto'}}>📁 PILIH GAMBAR</div>
               <input type="file" accept="image/*" onChange={handleUpload} />
             </div>
           </div>
-        )}
-
-        {view === 'workspace' && (
-          <div id="workspace" style={{ display: 'block' }}>
-            <div className="ws-header">
-              <div className="ws-title">YOUR STENCIL</div>
-              <div className="ws-sub">Gunakan slider & preset untuk mengoptimalkan hasil stensil Anda.</div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-title">Quick Presets</div>
-              <div className="presets-grid">
-                {['outline','dotwork','heavy','fineline','neo','blackwork'].map(p => (
-                  <div key={p} className={`preset-card ${activePreset === p ? 'active' : ''}`} onClick={() => applyPreset(p)}>
-                    <div className="preset-name" style={{marginTop:'6px'}}>{p.toUpperCase()}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-title">Thermal Matrix Controller</div>
-              <div className="slider-group">
-                <div className="slider-header"><span className="slider-label">Ketebalan Garis</span><div className="val-box">{detail}</div></div>
-                <input type="range" min="1" max="20" value={detail} onChange={e => setDetail(e.target.value)} />
-              </div>
-              <div className="slider-group">
-                <div className="slider-header"><span className="slider-label">Ambang Batas Gelap</span><div className="val-box">{thresh}</div></div>
-                <input type="range" min="40" max="240" value={thresh} onChange={e => setThresh(e.target.value)} />
-              </div>
-              <div className="slider-group">
-                <div className="slider-header"><span className="slider-label">Kepadatan Shading</span><div className="val-box">{shade}</div></div>
-                <input type="range" min="0" max="100" value={shade} onChange={e => setShade(e.target.value)} />
-              </div>
-              <div className="slider-group">
-                <div className="slider-header"><span className="slider-label">Ukuran Titik Dot</span><div className="val-box">{(dot/10).toFixed(1)}</div></div>
-                <input type="range" min="5" max="35" value={dot} onChange={e => setDot(e.target.value)} />
-              </div>
-              <div className="slider-group">
-                <div className="slider-header"><span className="slider-label">Kontras Gambar</span><div className="val-box">{(contrast/10).toFixed(1)}</div></div>
-                <input type="range" min="8" max="30" value={contrast} onChange={e => setContrast(e.target.value)} />
-              </div>
-              <div className="slider-group">
-                <div className="slider-header"><span className="slider-label">Sharpening Edge</span><div className="val-box">{(sharp/10).toFixed(1)}</div></div>
-                <input type="range" min="5" max="25" value={sharp} onChange={e => setSharp(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-title">Warna Tinta Stensil</div>
-              <div className="swatches">
-                {[
-                  {r:26,g:15,b:92, bg:'#1a0f5c'}, {r:10,g:26,b:61, bg:'#0a1a3d'}, 
-                  {r:17,g:17,b:17, bg:'#111111'}, {r:61,g:10,b:10, bg:'#3d0a0a'},
-                  {r:10,g:61,b:26, bg:'#0a3d1a'}, {r:45,g:26,b:61, bg:'#2d1a3d'}
-                ].map((c, i) => (
-                  <div key={i} className={`swatch ${inkColor.r === c.r ? 'active' : ''}`} style={{background: c.bg}} onClick={() => setInkColor(c)}></div>
-                ))}
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-title"><span>Before / After</span></div>
-              <div className="comparison-wrap" ref={compWrapRef} onMouseMove={(e) => e.buttons === 1 && handleSliderMove(e)} onTouchMove={handleSliderMove}>
-                <canvas ref={canvasRef}></canvas>
-                <img id="layer-original" src={origImg} alt="" style={{ clipPath: `polygon(0 0, ${compSlider}% 0, ${compSlider}% 100%, 0 100%)` }} />
-                <div className="lbl lbl-l">Original</div><div className="lbl lbl-r">Stencil</div>
-                <div id="div-line" style={{ left: `${compSlider}%` }}></div>
-                <div id="div-handle" style={{ left: `${compSlider}%` }}>◂▸</div>
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-title">Final Output</div>
-              <div className="final-box"><img id="final-img" src={finalImg} alt="Final" /></div>
-              <a href={finalImg} download="HopePlus_Stencil.png" style={{textDecoration:'none'}}>
-                <button className="btn btn-cyan" onClick={() => updateUser({downloads: (user.downloads||0)+1})} style={{marginBottom:'10px'}}>
-                  ↓ DOWNLOAD STENCIL HD
-                </button>
-              </a>
-              <button className="btn btn-ghost" onClick={() => { setOrigImg(''); setView('home'); }}>⟳ PROSES GAMBAR BARU</button>
-            </div>
-          </div>
+        ) : (
+          <Workspace 
+            origImg={origImg} finalImg={finalImg} compSlider={compSlider} 
+            handleSliderMove={handleSliderMove} canvasRef={canvasRef} compWrapRef={compWrapRef}
+            presets={['outline','dotwork','heavy','fineline','neo','blackwork']}
+            activePreset={activePreset} applyPreset={(name) => {
+              setActivePreset(name);
+              const p = {outline:{d:2,t:90,s:0,dot:8,c:14,sh:10},dotwork:{d:3,t:120,s:65,dot:12,c:13,sh:10},heavy:{d:8,t:160,s:85,dot:18,c:16,sh:14},fineline:{d:1,t:88,s:35,dot:8,c:16,sh:16},neo:{d:4,t:130,s:72,dot:15,c:14,sh:11},blackwork:{d:10,t:180,s:95,dot:22,c:18,sh:14}}[name];
+              setDetail(p.d); setThresh(p.t); setShade(p.s); setDot(p.dot); setContrast(p.c); setSharp(p.sh);
+            }}
+            sliders={[
+              {label:'Ketebalan', val:detail, displayVal:detail, min:1, max:20, onChange:setDetail},
+              {label:'Ambang Batas', val:thresh, displayVal:thresh, min:40, max:240, onChange:setThresh},
+              {label:'Shading', val:shade, displayVal:shade, min:0, max:100, onChange:setShade},
+              {label:'Ukuran Dot', val:dot, displayVal:(dot/10).toFixed(1), min:5, max:35, onChange:setDot},
+              {label:'Kontras', val:contrast, displayVal:(contrast/10).toFixed(1), min:8, max:30, onChange:setContrast},
+              {label:'Sharpen', val:sharp, displayVal:(sharp/10).toFixed(1), min:5, max:25, onChange:setSharp},
+            ]}
+            inkColors={[
+              {r:26,g:15,b:92, bg:'#1a0f5c'}, {r:10,g:26,b:61, bg:'#0a1a3d'}, 
+              {r:17,g:17,b:17, bg:'#111111'}, {r:61,g:10,b:10, bg:'#3d0a0a'}
+            ]}
+            inkColor={inkColor} setInkColor={setInkColor} updateUser={updateUser} user={user} setView={setView} setOrigImg={setOrigImg}
+          />
         )}
       </div>
 
@@ -433,11 +273,7 @@ export default function App() {
           <div className="modal-box">
             <button className="modal-close" onClick={() => setModalBuy(false)}>✕</button>
             <div className="modal-title">BELI KREDIT</div>
-            <div className="modal-sub">Screenshot & DM Instagram @HopePlus untuk beli.</div>
-            <div className="price-cards">
-              <div className="price-card popular selected"><div className="badge">POPULER</div><div className="amount">10</div><div className="price">Rp 45.000</div></div>
-            </div>
-            <button className="btn btn-gold" onClick={() => { setModalBuy(false); showToast('Hubungi Admin ya!', 'warn'); }}>✓ KONFIRMASI</button>
+            <button className="btn btn-gold" onClick={() => { setModalBuy(false); showToast('Hubungi Admin!', 'warn'); }}>✓ KONFIRMASI</button>
           </div>
         </div>
       )}
@@ -447,14 +283,8 @@ export default function App() {
           <div className="modal-box">
             <button className="modal-close" onClick={() => setModalAcc(false)}>✕</button>
             <div className="modal-title">AKUN SAYA</div>
-            <div className="avatar">👤</div>
-            <div style={{textAlign:'center', marginBottom:'20px'}}>
-              <div style={{fontFamily:'Orbitron', fontSize:'16px'}}>{user?.username}</div>
-              <div style={{fontSize:'12px', color:'var(--muted)'}}>{user?.email}</div>
-            </div>
             <div className="stat-row">
               <div className="stat-box"><div className="stat-num">{user?.credits}</div><div className="stat-lbl">Kredit</div></div>
-              <div className="stat-box"><div className="stat-num">{user?.used || 0}</div><div className="stat-lbl">Dipakai</div></div>
             </div>
             <button className="btn btn-danger" onClick={doLogout}>⏻ KELUAR</button>
           </div>
