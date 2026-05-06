@@ -67,10 +67,20 @@ export default function ModalBuy({ isOpen, onClose, user, onSuccess }) {
 
         <div className="price-cards">
           {packages.map(pkg => (
-            <div key={pkg.credits}
-              className={`price-card ${selected.credits === pkg.credits ? 'selected' : ''} ${pkg.popular ? 'popular' : ''}`}
+            <div
+              key={pkg.credits}
+              className={`price-card ${selected.credits === pkg.credits ? 'selected' : ''}`}
+              style={{
+                border: selected.credits === pkg.credits
+                  ? '2px solid var(--gold)'
+                  : pkg.popular
+                  ? '1px solid var(--cyan)'
+                  : '1px solid var(--border2)'
+              }}
               onClick={() => setSelected(pkg)}>
-              {pkg.popular && <div className="badge">POPULER</div>}
+              {pkg.popular && selected.credits !== pkg.credits && (
+                <div className="badge">POPULER</div>
+              )}
               <div className="amount">{pkg.credits}</div>
               <div className="credits">kredit</div>
               <div className="price">{pkg.label}</div>
@@ -79,7 +89,7 @@ export default function ModalBuy({ isOpen, onClose, user, onSuccess }) {
         </div>
 
         <button className="btn btn-gold" onClick={handleBuy} disabled={loading}>
-          {loading ? 'MEMPROSES...' : '✓ BAYAR SEKARANG'}
+          {loading ? 'MEMPROSES...' : `✓ BAYAR ${selected.label}`}
         </button>
       </div>
     </div>
