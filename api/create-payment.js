@@ -1,0 +1,42 @@
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { orderId, amount, credits, userId, email, name } = req.body;
+
+  const serverKey = process.env.VITE_MIDTRANS_SERVER_KEY;
+  const encoded = Buffer.from(serverKey + ':').toString('base64');
+
+  const response = await fetch('https://app.sandbox.midtrans.com/snap/v1/transactions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Basic ${encoded}`
+    },
+    body: JSON.stringify({
+      transaction_details: {
+        order_id: orderId,
+        gross_amount: amount
+      },
+      customer_details: {
+        first_name: name,
+        email: email
+      },
+      item_details: [{
+        id: `CREDIT-${credits}`,
+        price: amount,
+        quantity: 1,
+        name: `Hope+ ${credits} Kredit`
+      }]
+    })
+  });
+
+  const data = await response.json();
+
+  if (data.token) {
+    return res.status(200).json({ token: data.token });
+  } else {
+    return res.status(400).json({ error: data });
+  }
+}
