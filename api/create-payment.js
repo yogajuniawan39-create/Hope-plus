@@ -4,9 +4,8 @@ export default async function handler(req, res) {
   }
 
   const { orderId, amount, credits, userId, email, name } = req.body;
-
   const serverKey = process.env.MIDTRANS_SERVER_KEY;
-  
+
   if (!serverKey) {
     return res.status(500).json({ error: 'Server key tidak ditemukan' });
   }
@@ -14,7 +13,7 @@ export default async function handler(req, res) {
   const encoded = Buffer.from(serverKey + ':').toString('base64');
 
   try {
-    const response = await fetch('https://app.sandbox.midtrans.com/snap/v1/transactions', {
+    const response = await fetch('https://app.midtrans.com/snap/v1/transactions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
