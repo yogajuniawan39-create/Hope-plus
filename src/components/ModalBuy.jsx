@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 
 const packages = [
-  { credits: 5, price: 25000, label: 'Rp 25.000' },
-  { credits: 10, price: 45000, label: 'Rp 45.000', popular: true },
-  { credits: 25, price: 100000, label: 'Rp 100.000' },
-  { credits: 50, price: 175000, label: 'Rp 175.000' },
+  { credits: 5, price: 15000, label: 'Rp 15.000' },
+  { credits: 10, price: 25000, label: 'Rp 25.000', popular: true },
+  { credits: 25, price: 55000, label: 'Rp 55.000' },
+  { credits: 50, price: 99000, label: 'Rp 99.000' },
 ];
 
 export default function ModalBuy({ isOpen, onClose, user, onSuccess }) {
