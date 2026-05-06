@@ -3,12 +3,12 @@ import { UserButton } from '@clerk/clerk-react';
 
 export default function Header({ userCredits = 0, setModalBuy }) {
   return (
-    <div id="hud-header">
+    <div id="hud-header" style={{ padding: '15px 20px' }}>
       <div className="hud-logo" style={{ display: 'flex', alignItems: 'center' }}>
-        {/* Logo Simbol Emas */}
-        <img src="/logo-simbol.png" alt="Icon" style={{ height: '32px', marginRight: '10px' }} />
-        {/* Logo Teks Emas */}
-        <img src="/logo-teks.png" alt="Hope+ Studio" style={{ height: '18px' }} />
+        {/* LOGO SIMBOL DIPERBESAR */}
+        <img src="/logo-simbol.png" alt="Icon" style={{ height: '42px', marginRight: '12px' }} />
+        {/* LOGO TEKS DIPERBESAR */}
+        <img src="/logo-teks.png" alt="Hope+ Studio" style={{ height: '22px' }} />
       </div>
       
       <div className="hud-right">
