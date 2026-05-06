@@ -3,12 +3,14 @@ import { useUser, SignedIn, SignedOut } from '@clerk/clerk-react';
 import Paywall from './components/Paywall';
 import Header from './components/Header';
 import Workspace from './components/Workspace';
+import ModalBuy from './components/ModalBuy';
 import { supabase } from './utils/supabase';
 import { extractGray, bilateralFilter, unsharpMask, cannyEdge } from './utils/engine';
 
 export default function App() {
   const { isLoaded, isSignedIn, user } = useUser();
   const [credits, setCredits] = useState(5);
+  const [modalBuy, setModalBuy] = useState(false);
   const [toast, setToast] = useState({ msg: '', type: '', show: false });
   const [isProcessing, setIsProcessing] = useState(false);
   const [procText, setProcText] = useState('PROCESSING...');
@@ -73,12 +75,23 @@ export default function App() {
     const out = ctx.createImageData(W, H);
     for (let i = 0; i < W * H; i++) {
       const p = i * 4;
-      if (edges[i]) { out.data[p]=inkColor.r; out.data[p+1]=inkColor.g; out.data[p+2]=inkColor.b; out.data[p+3]=255; }
-      else { out.data[p]=255; out.data[p+1]=255; out.data[p+2]=255; out.data[p+3]=255; }
+      if (edges[i]) {
+        out.data[p]=inkColor.r; out.data[p+1]=inkColor.g;
+        out.data[p+2]=inkColor.b; out.data[p+3]=255;
+      } else {
+        out.data[p]=255; out.data[p+1]=255;
+        out.data[p+2]=255; out.data[p+3]=255;
+      }
     }
     ctx.putImageData(out, 0, 0);
     setFinalImg(canvas.toDataURL('image/png', 1.0));
     setIsProcessing(false);
+  };
+
+  const handlePaymentSuccess = async (newCredits) => {
+    const total = credits + newCredits;
+    await updateUser({ credits: total });
+    showToast(`✅ ${newCredits} kredit berhasil ditambahkan!`, 'success');
   };
 
   if (!isLoaded) return null;
@@ -87,13 +100,27 @@ export default function App() {
     <>
       <SignedOut><Paywall /></SignedOut>
       <SignedIn>
-        <Header userCredits={credits} setModalBuy={() => {}} />
-        <img ref={imgRef} src={origImg} style={{display:'none'}} alt="" crossOrigin="anonymous" onLoad={runPipeline} />
+        <Header userCredits={credits} setModalBuy={setModalBuy} />
+
+        <img ref={imgRef} src={origImg} style={{display:'none'}} alt=""
+          crossOrigin="anonymous" onLoad={runPipeline} />
+
         <div id="proc-overlay" className={isProcessing ? 'show' : ''}>
           <div className="spinner"></div>
           <div className="proc-text">{procText}</div>
         </div>
-        <div className={`toast ${toast.show ? 'show' : ''} ${toast.type}`}>{toast.msg}</div>
+
+        <div className={`toast ${toast.show ? 'show' : ''} ${toast.type}`}>
+          {toast.msg}
+        </div>
+
+        <ModalBuy
+          isOpen={modalBuy}
+          onClose={() => setModalBuy(false)}
+          user={user}
+          onSuccess={handlePaymentSuccess}
+        />
+
         <div id="main-content">
           {view === 'home' ? (
             <div id="pre-upload-view">
@@ -104,12 +131,17 @@ export default function App() {
               <div className="upload-zone">
                 <h3>Upload Desain</h3>
                 <p>Ubah foto / sketsa menjadi stensil Thermal HD</p>
-                <div className="btn btn-ghost" style={{pointerEvents:'none',maxWidth:'220px',margin:'0 auto'}}>📁 PILIH DARI GALERI</div>
+                <div className="btn btn-ghost" style={{pointerEvents:'none', maxWidth:'220px', margin:'0 auto'}}>
+                  📁 PILIH DARI GALERI
+                </div>
                 <input type="file" accept="image/*" onChange={(e) => {
                   const file = e.target.files[0];
                   if (file) {
                     const reader = new FileReader();
-                    reader.onload = (ev) => { setOrigImg(ev.target.result); setView('workspace'); };
+                    reader.onload = (ev) => {
+                      setOrigImg(ev.target.result);
+                      setView('workspace');
+                    };
                     reader.readAsDataURL(file);
                   }
                 }} />
