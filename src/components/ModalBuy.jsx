@@ -16,13 +16,6 @@ export default function ModalBuy({ isOpen, onClose, user, onSuccess }) {
   const handleBuy = async () => {
     setLoading(true);
     try {
-      const snap = window.snap;
-      if (!snap) {
-        alert('Midtrans belum loaded. Coba refresh halaman.');
-        setLoading(false);
-        return;
-      }
-
       const orderId = `HOPE-${user.id}-${Date.now()}`;
 
       const response = await fetch('/api/create-payment', {
@@ -39,6 +32,20 @@ export default function ModalBuy({ isOpen, onClose, user, onSuccess }) {
       });
 
       const data = await response.json();
+      alert('Response API: ' + JSON.stringify(data));
+
+      if (!data.token) {
+        alert('Error: ' + JSON.stringify(data.error));
+        setLoading(false);
+        return;
+      }
+
+      const snap = window.snap;
+      if (!snap) {
+        alert('Midtrans snap belum loaded!');
+        setLoading(false);
+        return;
+      }
 
       snap.pay(data.token, {
         onSuccess: () => { onSuccess(selected.credits); onClose(); },
