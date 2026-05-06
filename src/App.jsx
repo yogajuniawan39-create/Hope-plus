@@ -58,6 +58,38 @@ export default function App() {
     setTimeout(() => setToast({ msg: '', type: '', show: false }), 2500);
   };
 
+  const handlePaymentSuccess = async (newCredits) => {
+    const total = credits + newCredits;
+    await updateUser({ credits: total });
+    showToast(`✅ ${newCredits} kredit berhasil ditambahkan!`, 'success');
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // EMAIL ADMIN UNTUK AKSES UNLIMITED
+    const isAdmin = user?.primaryEmailAddress?.emailAddress === "hopeplus.studio@gmail.com";
+
+    if (!isAdmin) {
+      if (credits <= 0) {
+        setModalBuy(true);
+        showToast('Kredit habis! Silakan isi ulang.', 'error');
+        return; 
+      }
+      await updateUser({ credits: credits - 1 });
+    } else {
+      showToast('👑 Admin Mode: Bypass Kredit Aktif!', 'success');
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setOrigImg(ev.target.result);
+      setView('workspace');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const runPipeline = () => {
     const img = imgRef.current;
     const canvas = canvasRef.current;
@@ -86,12 +118,6 @@ export default function App() {
     ctx.putImageData(out, 0, 0);
     setFinalImg(canvas.toDataURL('image/png', 1.0));
     setIsProcessing(false);
-  };
-
-  const handlePaymentSuccess = async (newCredits) => {
-    const total = credits + newCredits;
-    await updateUser({ credits: total });
-    showToast(`✅ ${newCredits} kredit berhasil ditambahkan!`, 'success');
   };
 
   if (!isLoaded) return null;
@@ -126,7 +152,7 @@ export default function App() {
             <div id="pre-upload-view">
               <div className="hero-section">
                 <div className="hero-title">WELCOME, {user?.firstName}</div>
-                <div className="hero-sub">Konversi gambar → stensil tato berkualitas studio</div>
+                <div className="hero-sub">Hope+ Studio | Professional HD Stencil Engine</div>
               </div>
               <div className="upload-zone">
                 <h3>Upload Desain</h3>
@@ -134,17 +160,7 @@ export default function App() {
                 <div className="btn btn-ghost" style={{pointerEvents:'none', maxWidth:'220px', margin:'0 auto'}}>
                   📁 PILIH DARI GALERI
                 </div>
-                <input type="file" accept="image/*" onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      setOrigImg(ev.target.result);
-                      setView('workspace');
-                    };
-                    reader.readAsDataURL(file);
-                  }
-                }} />
+                <input type="file" accept="image/*" onChange={handleUpload} />
               </div>
             </div>
           ) : (

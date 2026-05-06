@@ -1,14 +1,16 @@
 import React from 'react';
-import { UserButton, useUser } from '@clerk/clerk-react';
+import { UserButton } from '@clerk/clerk-react';
 
 export default function Header({ userCredits = 0, setModalBuy }) {
-  const { user } = useUser();
-
   return (
     <div id="hud-header">
-      <div className="hud-logo">
-        <div className="hud-logo-text">HOPE<span>+</span></div>
+      <div className="hud-logo" style={{ display: 'flex', alignItems: 'center' }}>
+        {/* Logo Simbol Emas */}
+        <img src="/logo-simbol.png" alt="Icon" style={{ height: '32px', marginRight: '10px' }} />
+        {/* Logo Teks Emas */}
+        <img src="/logo-teks.png" alt="Hope+ Studio" style={{ height: '18px' }} />
       </div>
+      
       <div className="hud-right">
         <div className="credit-hud" onClick={() => setModalBuy(true)}>
           <span className="icon">💎</span>
@@ -18,7 +20,6 @@ export default function Header({ userCredits = 0, setModalBuy }) {
           </div>
         </div>
         
-        {/* Tombol Profil Otomatis dari Clerk */}
         <div className="account-btn" style={{ border: 'none', background: 'transparent' }}>
           <UserButton afterSignOutUrl="/" />
         </div>
