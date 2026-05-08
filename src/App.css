@@ -1,0 +1,100 @@
+/* =========================================
+   KOMPONEN APP CYBERPUNK HOPE+ STUDIO
+   ========================================= */
+
+/* --- TIPOGRAFI KHUSUS LOGO --- */
+.hud-logo-text, .paywall-brand {
+  font-family: var(--font-display) !important;
+  letter-spacing: 1px;
+}
+
+/* --- KOTAK PAYWALL / LOGIN --- */
+#paywall-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.paywall-box {
+  background: var(--panel-dark) !important;
+  border: 1px solid rgba(0, 243, 255, 0.3) !important;
+  box-shadow: 0 0 30px rgba(0, 243, 255, 0.05) !important;
+  border-radius: 8px;
+  color: white;
+  position: relative;
+}
+
+.free-badge {
+  background: rgba(0, 243, 255, 0.1);
+  color: var(--neon-cyan);
+  border: 1px solid var(--neon-cyan);
+  border-radius: 20px;
+  display: inline-block;
+  font-family: var(--font-mono);
+  padding: 6px 15px;
+  margin-top: 10px;
+}
+
+/* --- TOMBOL NEON GLOW --- */
+.btn-cyan {
+  background: transparent !important;
+  color: var(--neon-cyan) !important;
+  border: 1px solid var(--neon-cyan) !important;
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2), inset 0 0 10px rgba(0, 243, 255, 0.1) !important;
+  font-family: var(--font-display) !important;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  transition: all 0.3s ease !important;
+  border-radius: 4px;
+}
+
+.btn-cyan:hover, .btn-cyan:active {
+  background: var(--neon-cyan) !important;
+  color: #000 !important;
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.5) !important;
+}
+
+/* --- ANGKA KREDIT DIGITAL --- */
+.count {
+  font-family: var(--font-mono) !important;
+  color: var(--neon-cyan) !important;
+  text-shadow: 0 0 8px rgba(0, 243, 255, 0.5) !important;
+  font-size: 1.3em;
+  font-weight: bold;
+}
+
+/* --- HEADER HUD --- */
+#hud-header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+  background: rgba(15, 15, 19, 0.9);
+  backdrop-filter: blur(10px);
+  padding: 15px 20px;
+  margin-bottom: 40px; /* <-- TAMBAHAN BARU: Memberikan jarak ke bawah agar konten tidak mepet atas */
+}
+
+.credit-hud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+/* --- TAMPILAN DASHBOARD / WORKSPACE --- */
+.upload-zone {
+  border: 1px dashed rgba(0, 243, 255, 0.4);
+  background: rgba(0, 243, 255, 0.02);
+  border-radius: 8px;
+  padding: 40px 20px; /* <-- Diperbesar sedikit agar kotaknya lebih proporsional */
+  text-align: center;
+  margin-top: 20px;
+  transition: all 0.3s;
+}
+
+.upload-zone:hover {
+  background: rgba(0, 243, 255, 0.05);
+  border-color: var(--neon-cyan);
+}
